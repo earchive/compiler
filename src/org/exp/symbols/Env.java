@@ -1,7 +1,5 @@
 package org.exp.symbols;
 
-import org.exp.lexer.Token;
-
 import java.util.Hashtable;
 
 public class Env {
