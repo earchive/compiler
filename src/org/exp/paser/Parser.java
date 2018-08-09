@@ -1,9 +1,11 @@
 package org.exp.paser;
 
+import org.exp.inter.Access;
 import org.exp.inter.Expr;
 import org.exp.inter.Id;
 import org.exp.inter.Stmt;
-import org.exp.inter.stmt.Sequence;
+import org.exp.inter.logical.Or;
+import org.exp.inter.stmt.*;
 import org.exp.lexer.*;
 import org.exp.symbols.Array;
 import org.exp.symbols.Env;
@@ -85,18 +87,97 @@ public class Parser {
 		return new Array(((Num) tok).value, p);
 	}
 
-	Stmt stmts() {
+	Stmt stmts() throws IOException {
 		if (look.tag == '}')
 			return Stmt.Null;
 		return new Sequence(stmt(), stmts());
 	}
 
-	Stmt stmt() {
+	Stmt stmt() throws IOException {
 		Expr x;
 		Stmt s, s1, s2;
 		Stmt savedStmt;
-
-
-		return new Stmt();
+		switch (look.tag) {
+			case ';':
+				move();
+				return Stmt.Null;
+			case Tag.IF:
+				match(Tag.IF);
+				match('(');
+				x = bool();
+				match(')');
+				s1 = stmt();
+				if (look.tag != Tag.ELSE)
+					return new If(x, s1);
+				match(Tag.ELSE);
+				s2 = stmt();
+				return new Else(x, s1, s2);
+			case Tag.WHILE:
+				While whileNode = new While();
+				savedStmt = Stmt.Enclosing;
+				Stmt.Enclosing = whileNode;
+				match(Tag.WHILE);
+				match('(');
+				x = bool();
+				match(')');
+				s1 = stmt();
+				whileNode.init(x, s1);
+				Stmt.Enclosing = savedStmt;
+				return whileNode;
+			case Tag.DO:
+				Do doNode = new Do();
+				savedStmt = Stmt.Enclosing;
+				Stmt.Enclosing = doNode;
+				match(Tag.DO);
+				s1 = stmt();
+				match(Tag.WHILE);
+				match('(');
+				x = bool();
+				match(')');
+				match(';');
+				doNode.init(s1, x);
+				Stmt.Enclosing = savedStmt;
+				return doNode;
+			case Tag.BREAK:
+				match(Tag.BREAK);
+				match(';');
+				return new Break();
+			case '{':
+				return block();
+			default:
+				return assign();
+		}
 	}
+
+	Stmt assign() throws IOException {
+		Stmt stmt;
+		Token t = look;
+		match(Tag.ID);
+		Id id = top.get(t);
+		if (id == null)
+			error(t.toString() + " undeclared");
+		if (look.tag == '=') {
+			move();
+			assert id != null; //redundant
+			stmt = new Set(id, bool());
+		} else {
+			Access x = offset(id);
+			match('=');
+			stmt = new SetElement(x, bool());
+		}
+		match(';');
+		return stmt;
+	}
+
+	Expr bool() throws IOException {
+		Expr x = join();
+		while (look.tag == Tag.OR) {
+			Token tok = look;
+			move();
+			x = new Or(tok, x, join());
+		}
+		return x;
+	}
+
+
 }
